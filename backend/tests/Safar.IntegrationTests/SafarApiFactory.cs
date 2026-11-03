@@ -35,7 +35,7 @@ public class SafarApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         }
         else
         {
-            _container = new PostgreSqlBuilder().WithImage("postgres:17-alpine").Build();
+            _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
             await _container.StartAsync();
             _connectionString = _container.GetConnectionString();
         }
