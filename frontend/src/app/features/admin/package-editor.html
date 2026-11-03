@@ -1,0 +1,95 @@
+<a routerLink="/admin/packages" class="back">All packages</a>
+<header class="admin-head">
+  <h1>{{ isNew() ? 'New package' : (pkg()?.title ?? 'Package') }}</h1>
+  @if (pkg(); as p) {
+    <div class="admin-head__actions">
+      <span [class]="p.isPublished ? 'pill pill--on' : 'pill'">{{ p.isPublished ? 'Published' : 'Draft' }}</span>
+      @if (p.isPublished) {
+        <a [routerLink]="['/trips', p.slug]" class="btn btn--ghost btn--small">View on site</a>
+      }
+      <button type="button" class="btn btn--small" [class.btn--primary]="!p.isPublished" [class.btn--ghost]="p.isPublished" (click)="togglePublished()">
+        {{ p.isPublished ? 'Unpublish' : 'Publish' }}
+      </button>
+    </div>
+  }
+</header>
+
+@if (errors().length) {
+  <div class="notice notice--error" role="alert">
+    @for (e of errors(); track $index) { <p>{{ e }}</p> }
+  </div>
+}
+
+<form class="panel editor" [formGroup]="form" (ngSubmit)="save()" novalidate>
+  <div class="fields">
+    <label class="field field--wide"><span>Title</span><input formControlName="title" /></label>
+    <label class="field field--wide"><span>Summary (shown on cards)</span><input formControlName="summary" maxlength="300" /></label>
+    <label class="field"><span>Destination</span><input formControlName="destination" /></label>
+    <label class="field"><span>Country</span><input formControlName="country" /></label>
+    <label class="field">
+      <span>Type</span>
+      <select formControlName="category">
+        @for (c of categories; track c) { <option [value]="c">{{ labels[c] }}</option> }
+      </select>
+    </label>
+    <label class="field"><span>Length in days</span><input type="number" formControlName="durationDays" min="1" max="30" /></label>
+    <label class="field"><span>Base price per person (QAR)</span><input type="number" formControlName="basePrice" min="1" /></label>
+    <label class="field"><span>Photo URL <em>(optional, https)</em></span><input formControlName="imageUrl" placeholder="https://…" /></label>
+    <label class="field field--wide"><span>Description</span><textarea formControlName="description" rows="4"></textarea></label>
+    <label class="field"><span>Highlights, one per line</span><textarea formControlName="highlights" rows="5"></textarea></label>
+    <label class="field"><span>What's included, one per line</span><textarea formControlName="inclusions" rows="5"></textarea></label>
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn btn--primary" [disabled]="saving()">{{ saving() ? 'Saving…' : isNew() ? 'Create package' : 'Save changes' }}</button>
+  </div>
+</form>
+
+@if (pkg(); as p) {
+  <section class="panel">
+    <h2>Departures</h2>
+    <p class="muted small">Showing departures from the last 30 days onwards.</p>
+    <table class="table">
+      <thead>
+        <tr><th>Date</th><th class="num">Sold</th><th>Occupancy</th><th class="num">Price</th><th class="num">Bookings</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        @for (d of p.departures; track d.id) {
+          <tr [class.is-muted]="isPast(d) || d.status === 'Cancelled'">
+            <td>{{ d.startDate | date: 'EEE d MMM y' }}</td>
+            <td class="num">{{ d.seatsBooked }}/{{ d.capacity }}</td>
+            <td>
+              <span class="occupancy__bar occupancy__bar--inline"><span [style.width.%]="(d.seatsBooked / d.capacity) * 100"></span></span>
+            </td>
+            <td class="num">{{ d.pricePerPerson | qar }}@if (d.priceOverride) { <span class="muted"> seasonal</span> }</td>
+            <td class="num">{{ d.confirmedBookings }}@if (d.pendingBookings) { <span class="muted"> +{{ d.pendingBookings }} unpaid</span> }</td>
+            <td>{{ d.status === 'Cancelled' ? 'Cancelled' : isPast(d) ? 'Departed' : 'Scheduled' }}</td>
+            <td class="row-actions">
+              <a [routerLink]="['/admin/departures', d.id, 'manifest']">Manifest</a>
+              @if (auth.user()?.role === 'Admin' && d.status === 'Scheduled' && !isPast(d)) {
+                @if (cancellingId === d.id) {
+                  <span class="inline-confirm">
+                    <input [(ngModel)]="cancelReason" placeholder="Reason, e.g. weather" aria-label="Cancellation reason" />
+                    <button type="button" class="btn btn--danger btn--small" [disabled]="!cancelReason.trim()" (click)="confirmCancelDeparture(d)">Cancel and refund all</button>
+                    <button type="button" class="link-button" (click)="cancellingId = null">Keep</button>
+                  </span>
+                } @else {
+                  <button type="button" class="link-button link-button--danger" (click)="cancellingId = d.id">Cancel</button>
+                }
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="7" class="table__empty">No departures yet. Add the first date below.</td></tr>
+        }
+      </tbody>
+    </table>
+
+    <form class="add-departure" [formGroup]="departureForm" (ngSubmit)="addDeparture()">
+      <h3>Add a departure</h3>
+      <label class="field"><span>Start date</span><input type="date" formControlName="startDate" [min]="minDate" /></label>
+      <label class="field"><span>Seats</span><input type="number" formControlName="capacity" min="1" max="200" /></label>
+      <label class="field"><span>Seasonal price <em>(optional)</em></span><input type="number" formControlName="priceOverride" min="1" [placeholder]="p.basePrice" /></label>
+      <button type="submit" class="btn btn--primary">Add departure</button>
+    </form>
+  </section>
+}

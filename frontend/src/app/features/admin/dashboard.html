@@ -1,0 +1,128 @@
+<header class="admin-head">
+  <h1>Dashboard</h1>
+  <button type="button" class="btn btn--ghost btn--small" (click)="load()">Refresh</button>
+</header>
+
+@if (error()) {
+  <div class="notice notice--error">{{ error() }}</div>
+}
+
+@if (data(); as d) {
+  <section class="kpis">
+    <div class="kpi kpi--lead">
+      <span class="kpi__label">Revenue this month</span>
+      <span class="kpi__value">{{ d.revenueThisMonth | qar }}</span>
+      @if (monthChange() !== null) {
+        <span class="kpi__delta" [class.is-down]="monthChange()! < 0">
+          {{ monthChange()! >= 0 ? '+' : '' }}{{ monthChange() }}% vs last month
+        </span>
+      }
+    </div>
+    <div class="kpi">
+      <span class="kpi__label">Bookings confirmed this month</span>
+      <span class="kpi__value">{{ d.confirmedBookingsThisMonth }}</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__label">Travellers in the next 30 days</span>
+      <span class="kpi__value">{{ d.travellersNext30Days }}</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__label">Average seat occupancy</span>
+      <span class="kpi__value">{{ d.averageOccupancy | number: '1.0-0' }}%</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__label">Waiting for payment</span>
+      <span class="kpi__value">{{ d.pendingPayments }}</span>
+    </div>
+  </section>
+
+  <div class="admin-grid">
+    <section class="panel panel--chart">
+      <h2>Revenue, last 6 months</h2>
+      <svg viewBox="0 0 600 220" class="chart" role="img" aria-label="Monthly revenue bar chart">
+        @for (b of bars(); track b.label) {
+          <g>
+            <rect [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.width" [attr.height]="b.height" rx="3"
+                  [class]="b.current ? 'chart__bar chart__bar--current' : 'chart__bar'">
+              <title>{{ b.label }}: {{ b.value | qar }} from {{ b.bookings }} payments</title>
+            </rect>
+            <text [attr.x]="b.x + b.width / 2" [attr.y]="b.y - 6" class="chart__value">{{ compact(b.value) }}</text>
+            <text [attr.x]="b.x + b.width / 2" y="208" class="chart__label">{{ b.label }}</text>
+          </g>
+        }
+      </svg>
+      <p class="muted small">Net of refunds. Current month is highlighted.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Live activity</h2>
+      @if (notifications.events().length === 0) {
+        <p class="muted">New bookings and cancellations appear here as they happen. Book a trip on the customer site in another tab to try it.</p>
+      }
+      <ul class="feed">
+        @for (e of notifications.events(); track e.reference + e.event) {
+          <li [class.is-cancel]="e.event === 'BookingCancelled'">
+            <a [routerLink]="['/admin/bookings', e.reference]">{{ e.reference }}</a>
+            {{ e.event === 'BookingConfirmed' ? 'confirmed' : 'cancelled' }}:
+            {{ e.customerName }}, {{ e.packageTitle }}, {{ e.seats }} {{ e.seats === 1 ? 'seat' : 'seats' }}
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Top packages by revenue</h2>
+      <table class="table">
+        <thead><tr><th>Package</th><th class="num">Bookings</th><th class="num">Travellers</th><th class="num">Revenue</th></tr></thead>
+        <tbody>
+          @for (p of d.topPackages; track p.id) {
+            <tr>
+              <td><a [routerLink]="['/admin/packages', p.id]">{{ p.title }}</a></td>
+              <td class="num">{{ p.bookings }}</td>
+              <td class="num">{{ p.travellers }}</td>
+              <td class="num">{{ p.revenue | qar }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Upcoming departures</h2>
+      <ul class="occupancy">
+        @for (dep of d.upcomingDepartures; track dep.id) {
+          <li>
+            <a [routerLink]="['/admin/departures', dep.id, 'manifest']" class="occupancy__name">
+              {{ dep.startDate | date: 'd MMM' }}, {{ dep.packageTitle }}
+            </a>
+            <span class="occupancy__bar" role="img" [attr.aria-label]="dep.seatsBooked + ' of ' + dep.capacity + ' seats sold'">
+              <span [style.width.%]="dep.occupancyPercent" [class.is-full]="dep.occupancyPercent >= 90"></span>
+            </span>
+            <span class="occupancy__count">{{ dep.seatsBooked }}/{{ dep.capacity }}</span>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel panel--wide">
+      <h2>Latest bookings</h2>
+      <table class="table">
+        <thead><tr><th>Reference</th><th>Customer</th><th>Trip</th><th>Departs</th><th class="num">Total</th><th>Status</th></tr></thead>
+        <tbody>
+          @for (b of d.recentBookings; track b.id) {
+            <tr>
+              <td><a [routerLink]="['/admin/bookings', b.reference]" class="ref">{{ b.reference }}</a></td>
+              <td>{{ b.customerName }}</td>
+              <td>{{ b.packageTitle }}</td>
+              <td>{{ b.departureDate | date: 'd MMM y' }}</td>
+              <td class="num">{{ b.total | qar }}</td>
+              <td><app-status [status]="b.status" /></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  </div>
+} @else if (!error()) {
+  <p class="muted">Loading dashboard…</p>
+}
