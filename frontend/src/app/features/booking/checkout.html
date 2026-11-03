@@ -1,0 +1,127 @@
+<div class="container page checkout">
+  <form class="checkout__form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (pkg(); as p) {
+      <a [routerLink]="['/trips', p.slug]" class="back">{{ p.title }}</a>
+    }
+    <h1>Who's travelling?</h1>
+    <p class="muted">Names must match passports. Passport numbers can be added later, but are needed before flights are issued.</p>
+
+    @if (errors().length) {
+      <div class="notice notice--error" role="alert">
+        @for (e of errors(); track $index) {
+          <p>{{ e }}</p>
+        }
+      </div>
+    }
+
+    <ol class="travellers" formArrayName="travellers">
+      @for (t of travellers.controls; track t; let i = $index) {
+        <li class="traveller" [formGroupName]="i">
+          <div class="traveller__head">
+            <h2>Traveller {{ i + 1 }}@if (i === 0) { <span class="muted"> (lead)</span> }</h2>
+            @if (travellers.length > 1) {
+              <button type="button" class="link-button" (click)="removeTraveller(i)">Remove</button>
+            }
+          </div>
+          <div class="fields">
+            <label class="field field--wide">
+              <span>Full name</span>
+              <input formControlName="fullName" autocomplete="name" />
+              @if (invalid('fullName', i)) { <small class="field__error">Enter the name as shown on the passport.</small> }
+            </label>
+            <label class="field">
+              <span>Nationality</span>
+              <input formControlName="nationality" list="nationalities" />
+              @if (invalid('nationality', i)) { <small class="field__error">Nationality is required.</small> }
+            </label>
+            <label class="field">
+              <span>Passport number <em>(optional)</em></span>
+              <input formControlName="passportNumber" autocomplete="off" />
+              @if (invalid('passportNumber', i)) { <small class="field__error">Letters and numbers only.</small> }
+            </label>
+            <label class="field">
+              <span>Date of birth <em>(optional)</em></span>
+              <input type="date" formControlName="dateOfBirth" />
+            </label>
+          </div>
+        </li>
+      }
+    </ol>
+    <datalist id="nationalities">
+      <option value="Qatari"></option>
+      <option value="Indian"></option>
+      <option value="Filipino"></option>
+      <option value="Egyptian"></option>
+      <option value="Pakistani"></option>
+      <option value="Bangladeshi"></option>
+      <option value="Nepali"></option>
+      <option value="British"></option>
+    </datalist>
+
+    @if (travellers.length < maxTravellers()) {
+      <button type="button" class="btn btn--ghost" (click)="addTraveller()">Add another traveller</button>
+    }
+
+    <h2 class="section-title">Contact for this booking</h2>
+    <div class="fields">
+      <label class="field">
+        <span>Email</span>
+        <input type="email" formControlName="contactEmail" autocomplete="email" />
+        @if (invalid('contactEmail')) { <small class="field__error">Enter a valid email address.</small> }
+      </label>
+      <label class="field">
+        <span>Mobile number</span>
+        <input type="tel" formControlName="contactPhone" autocomplete="tel" placeholder="+974 5555 5555" />
+        @if (invalid('contactPhone')) { <small class="field__error">Enter a mobile number with country code.</small> }
+      </label>
+      <label class="field field--wide">
+        <span>Special requests <em>(optional)</em></span>
+        <textarea formControlName="specialRequests" rows="2" placeholder="Dietary needs, celebrations, mobility assistance"></textarea>
+      </label>
+    </div>
+  </form>
+
+  <aside class="summary">
+    @if (pkg(); as p) {
+      <app-cover [destination]="p.destination" [country]="p.country" [category]="p.category" [imageUrl]="p.imageUrl" size="thumb" />
+      <h2 class="summary__title">{{ p.title }}</h2>
+      @if (departure(); as d) {
+        <p class="summary__dates">{{ d.startDate | date: 'EEE d MMM y' }}@if (p.durationDays > 1) { to {{ d.endDate | date: 'EEE d MMM' }} }</p>
+      }
+    }
+
+    <div class="promo">
+      @if (appliedPromo() && quote()?.promoCode) {
+        <p class="promo__applied">
+          <span><strong>{{ quote()?.promoCode }}</strong> applied</span>
+          <button type="button" class="link-button" (click)="removePromo()">Remove</button>
+        </p>
+      } @else {
+        <label class="visually-hidden" for="promo">Promo code</label>
+        <input id="promo" [formControl]="form.controls.promoCode" placeholder="Promo code" (keydown.enter)="$event.preventDefault(); applyPromo()" />
+        <button type="button" class="btn btn--ghost" (click)="applyPromo()" [disabled]="!form.controls.promoCode.value">Apply</button>
+      }
+    </div>
+    @if (promoMessage(); as m) {
+      <p class="promo__message" [class.is-error]="!m.ok">{{ m.text }}</p>
+    }
+
+    @if (quote(); as q) {
+      <dl class="totals">
+        <div><dt>{{ q.seats }} × {{ q.unitPrice | qar }}</dt><dd>{{ q.subtotal | qar }}</dd></div>
+        @if (q.discount > 0) {
+          <div class="totals__discount"><dt>Discount</dt><dd>−{{ q.discount | qar }}</dd></div>
+        }
+        <div class="totals__grand"><dt>Total</dt><dd>{{ q.total | qar }}</dd></div>
+      </dl>
+      @if (q.seatsAvailable <= 4) {
+        <p class="summary__warn">Only {{ q.seatsAvailable }} seats left on this date.</p>
+      }
+    }
+
+    <button type="button" class="btn btn--primary btn--block" (click)="submit()" [disabled]="submitting() || !departure()">
+      {{ submitting() ? 'Holding your seats…' : 'Continue to payment' }}
+    </button>
+    <p class="summary__note">Your seats are held for 15 minutes once you continue.</p>
+  </aside>
+</div>

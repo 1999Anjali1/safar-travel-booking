@@ -1,0 +1,164 @@
+<div class="container page booking" [class.booking--admin]="isAdminView()">
+  @if (booking(); as b) {
+    <a [routerLink]="isAdminView() ? '/admin/bookings' : '/my-trips'" class="back">{{ isAdminView() ? 'All bookings' : 'My trips' }}</a>
+
+    <div class="booking__heading">
+      <h1>
+        @switch (b.status) {
+          @case ('PendingPayment') { Complete your payment }
+          @case ('Confirmed') { You're going to {{ b.package.destination }} }
+          @case ('Cancelled') { Booking cancelled }
+          @case ('Expired') { This booking expired }
+        }
+      </h1>
+      <app-status [status]="b.status" />
+    </div>
+
+    @if (error()) {
+      <div class="notice notice--error" role="alert">{{ error() }}</div>
+    }
+
+    <!-- Boarding-pass style summary -->
+    <section class="pass" [class.is-void]="b.status === 'Cancelled' || b.status === 'Expired'">
+      <div class="pass__main">
+        <p class="pass__ref">Booking <strong>{{ b.reference }}</strong></p>
+        <h2 class="pass__trip">{{ b.package.title }}</h2>
+        <div class="pass__route">
+          <div>
+            <span class="pass__label">Departs</span>
+            <span class="pass__value">{{ b.departureDate | date: 'EEE d MMM y' }}</span>
+          </div>
+          @if (b.package.durationDays > 1) {
+            <div>
+              <span class="pass__label">Returns</span>
+              <span class="pass__value">{{ b.returnDate | date: 'EEE d MMM y' }}</span>
+            </div>
+          }
+          <div>
+            <span class="pass__label">Destination</span>
+            <span class="pass__value">{{ b.package.destination }}, {{ b.package.country }}</span>
+          </div>
+        </div>
+        <table class="pass__travellers">
+          <caption class="visually-hidden">Travellers</caption>
+          <thead>
+            <tr><th scope="col">Traveller</th><th scope="col">Nationality</th><th scope="col">Passport</th></tr>
+          </thead>
+          <tbody>
+            @for (t of b.travellers; track $index) {
+              <tr>
+                <td>{{ t.fullName }}</td>
+                <td>{{ t.nationality }}</td>
+                <td>{{ t.passportNumber ?? 'To be added' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pass__stub">
+        <span class="pass__label">Seats</span>
+        <span class="pass__big">{{ b.seats }}</span>
+        <span class="pass__label">Total paid</span>
+        <span class="pass__value">{{ b.status === 'PendingPayment' ? 'Not paid yet' : (b.total | qar) }}</span>
+        @if (b.refundAmount > 0) {
+          <span class="pass__label">Refunded</span>
+          <span class="pass__value">{{ b.refundAmount | qar }}</span>
+        }
+      </div>
+    </section>
+
+    <div class="booking__grid">
+      <!-- Payment -->
+      @if (b.status === 'PendingPayment') {
+        <section class="panel">
+          @if (secondsLeft() > 0) {
+            <h2>Pay {{ b.total | qar }}</h2>
+            <p class="hold">Seats held for <strong class="hold__time">{{ countdown() }}</strong></p>
+            <fieldset class="methods">
+              <legend class="visually-hidden">Payment method</legend>
+              @for (m of methods; track m.value) {
+                <label class="method" [class.is-selected]="method === m.value">
+                  <input type="radio" name="method" [value]="m.value" [(ngModel)]="method" />
+                  {{ m.label }}
+                </label>
+              }
+            </fieldset>
+            <button type="button" class="btn btn--primary btn--block" (click)="pay()" [disabled]="busy()">
+              {{ busy() ? 'Processing payment…' : 'Pay ' + (b.total | qar) }}
+            </button>
+            <p class="muted small">This is a demo: no real payment is taken and no card details are collected.</p>
+          } @else {
+            <h2>Your seat hold has ended</h2>
+            <p>Seats are released 15 minutes after booking if payment isn't completed.</p>
+            <a [routerLink]="['/trips', b.package.slug]" class="btn btn--primary">Choose a date again</a>
+          }
+        </section>
+      }
+
+      <!-- Price breakdown -->
+      <section class="panel">
+        <h2>Price</h2>
+        <dl class="totals">
+          <div><dt>{{ b.seats }} × {{ b.unitPrice | qar }}</dt><dd>{{ b.subtotal | qar }}</dd></div>
+          @if (b.discount > 0) {
+            <div class="totals__discount"><dt>Promo {{ b.promoCode }}</dt><dd>−{{ b.discount | qar }}</dd></div>
+          }
+          <div class="totals__grand"><dt>Total</dt><dd>{{ b.total | qar }}</dd></div>
+        </dl>
+        @if (b.payments.length) {
+          <h3>Payments</h3>
+          <ul class="payments">
+            @for (p of b.payments; track p.transactionId) {
+              <li>
+                <span>{{ p.status === 'Refunded' ? 'Refund' : p.method }}, {{ p.createdAt | date: 'd MMM HH:mm' }}</span>
+                <span [class.text-good]="p.amount < 0">{{ p.amount | qar }}</span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <!-- Contact & cancellation -->
+      <section class="panel">
+        <h2>Contact</h2>
+        <p>{{ b.customerName }}<br />{{ b.contactEmail }}<br />{{ b.contactPhone }}</p>
+        @if (b.specialRequests) {
+          <p class="muted">Requests: {{ b.specialRequests }}</p>
+        }
+        @if (b.cancellationReason) {
+          <p class="muted">Cancelled {{ b.cancelledAt | date: 'd MMM y' }}: {{ b.cancellationReason }}</p>
+        }
+
+        @if (b.canCancel) {
+          @if (cancelQuote(); as q) {
+            <div class="cancel-box">
+              <h3>Cancel this booking?</h3>
+              @if (b.status === 'Confirmed') {
+                <p>
+                  You're {{ q.daysBeforeDeparture }} days from departure, so you'll get
+                  <strong>{{ q.refund | qar }}</strong> back ({{ q.refundPercent }}% of {{ q.amountPaid | qar }}).
+                </p>
+              } @else {
+                <p>Nothing has been paid yet. The held seats will be released.</p>
+              }
+              <label class="field">
+                <span>Reason <em>(optional)</em></span>
+                <input [(ngModel)]="cancelReason" />
+              </label>
+              <div class="actions">
+                <button type="button" class="btn btn--ghost" (click)="cancelQuote.set(null)">Keep booking</button>
+                <button type="button" class="btn btn--danger" (click)="confirmCancel()" [disabled]="busy()">Cancel booking</button>
+              </div>
+            </div>
+          } @else {
+            <button type="button" class="link-button link-button--danger" (click)="startCancel()">Cancel booking</button>
+          }
+        }
+      </section>
+    </div>
+  } @else if (error()) {
+    <div class="notice notice--error">{{ error() }}</div>
+  } @else {
+    <p class="muted">Loading booking…</p>
+  }
+</div>

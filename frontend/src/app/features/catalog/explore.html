@@ -1,0 +1,99 @@
+<section class="hero">
+  <div class="container hero__inner">
+    <h1 class="hero__title">Trips from Doha,<br />booked in minutes.</h1>
+    <p class="hero__lede">Desert camps, city breaks and island escapes with fixed departure dates, live seat availability and clear refund rules.</p>
+
+    <form class="search" (ngSubmit)="submitSearch()" role="search">
+      <label class="visually-hidden" for="q">Search trips</label>
+      <input id="q" name="q" [(ngModel)]="searchText" placeholder="Where would you like to go? Try Georgia, Maldives or desert" autocomplete="off" />
+      <button type="submit" class="btn btn--accent">Search</button>
+    </form>
+
+    <div class="chips" role="group" aria-label="Trip type">
+      <button type="button" class="chip" [class.is-active]="!category()" (click)="update({ category: null })">All trips</button>
+      @for (c of categories; track c) {
+        <button type="button" class="chip" [class.is-active]="category() === c" (click)="update({ category: c })">
+          {{ categoryLabels[c] }}
+        </button>
+      }
+    </div>
+  </div>
+</section>
+
+<section class="container catalog">
+  <div class="catalog__bar">
+    <p class="catalog__count">
+      @if (result(); as r) {
+        {{ r.totalCount }} {{ r.totalCount === 1 ? 'trip' : 'trips' }}
+        @if (search()) { matching “{{ search() }}” }
+        @if (category()) { in {{ categoryLabels[category() || 'City'] | lowercase }} }
+      }
+    </p>
+    <div class="catalog__controls">
+      <label>
+        <span class="visually-hidden">Country</span>
+        <select [ngModel]="country()" (ngModelChange)="update({ country: $event || null })">
+          <option value="">All countries</option>
+          @for (c of filters()?.countries ?? []; track c) {
+            <option [value]="c">{{ c }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span class="visually-hidden">Sort by</span>
+        <select [ngModel]="sort()" (ngModelChange)="update({ sort: $event })">
+          <option value="popular">Most booked</option>
+          <option value="price-asc">Price: low to high</option>
+          <option value="price-desc">Price: high to low</option>
+          <option value="duration">Shortest first</option>
+          <option value="newest">Newest</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="notice notice--error">{{ error() }}</div>
+  }
+
+  <div class="grid" [class.is-loading]="loading()">
+    @for (p of result()?.items ?? []; track p.id) {
+      <a class="trip" [routerLink]="['/trips', p.slug]">
+        <app-cover [destination]="p.destination" [country]="p.country" [category]="p.category" [imageUrl]="p.imageUrl" />
+        <div class="trip__body">
+          <h2 class="trip__title">{{ p.title }}</h2>
+          <p class="trip__summary">{{ p.summary }}</p>
+          <dl class="trip__facts">
+            <div>
+              <dt>Length</dt>
+              <dd>{{ p.durationDays }} {{ p.durationDays === 1 ? 'day' : 'days' }}</dd>
+            </div>
+            <div>
+              <dt>Next departure</dt>
+              <dd>{{ p.nextDeparture ? (p.nextDeparture | date: 'd MMM') : 'To be announced' }}</dd>
+            </div>
+          </dl>
+          <p class="trip__price">from <strong>{{ p.fromPrice | qar }}</strong> per person</p>
+        </div>
+      </a>
+    } @empty {
+      @if (!loading()) {
+        <div class="empty">
+          <h2>No trips match these filters</h2>
+          <p>Try a different destination or remove a filter.</p>
+          <button type="button" class="btn" (click)="clearFilters()">Show all trips</button>
+        </div>
+      }
+    }
+  </div>
+
+  @if (result(); as r) {
+    @if (r.totalPages > 1) {
+      <nav class="pager" aria-label="Pages">
+        <button type="button" class="btn btn--ghost" [disabled]="pageNumber() <= 1" (click)="update({ page: pageNumber() - 1 })">Previous</button>
+        <span>Page {{ pageNumber() }} of {{ r.totalPages }}</span>
+        <button type="button" class="btn btn--ghost" [disabled]="pageNumber() >= r.totalPages" (click)="update({ page: pageNumber() + 1 })">Next</button>
+      </nav>
+    }
+  }
+</section>

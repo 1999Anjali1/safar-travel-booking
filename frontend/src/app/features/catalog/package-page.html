@@ -1,0 +1,97 @@
+@if (pkg(); as p) {
+  <app-cover [destination]="p.destination" [country]="p.country" [category]="p.category" [imageUrl]="p.imageUrl" size="hero" />
+
+  <div class="container detail">
+    <article class="detail__main">
+      <a routerLink="/" class="back">All trips</a>
+      <h1 class="detail__title">{{ p.title }}</h1>
+      <p class="detail__meta">
+        {{ categoryLabels[p.category] }}, {{ p.durationDays }} {{ p.durationDays === 1 ? 'day' : 'days' }}, from {{ p.basePrice | qar }} per person
+      </p>
+      <p class="detail__lede">{{ p.summary }}</p>
+
+      <h2>Highlights</h2>
+      <ul class="ticks">
+        @for (h of p.highlights; track h) {
+          <li>{{ h }}</li>
+        }
+      </ul>
+
+      <h2>About this trip</h2>
+      <p class="prose">{{ p.description }}</p>
+
+      <h2>What's included</h2>
+      <ul class="ticks ticks--plain">
+        @for (i of p.inclusions; track i) {
+          <li>{{ i }}</li>
+        }
+      </ul>
+
+      <h2>If your plans change</h2>
+      <p class="prose">
+        Cancel online up to the day before you travel. Refunds are 90% when you cancel 30 or more days before departure,
+        50% at 15 to 29 days, 25% at 7 to 14 days and nothing inside 7 days. If we cancel a departure you get everything back.
+      </p>
+    </article>
+
+    <aside class="board" aria-labelledby="board-title">
+      <h2 id="board-title" class="board__title">Departures</h2>
+      @if (p.departures.length === 0) {
+        <p class="board__empty">New dates for this trip are coming soon.</p>
+      } @else {
+        <div class="board__head" aria-hidden="true">
+          <span>Date</span><span>Seats</span><span>Per person</span>
+        </div>
+        <ul class="board__rows" role="listbox" aria-label="Choose a departure date">
+          @for (d of p.departures; track d.id) {
+            <li
+              role="option"
+              class="board__row"
+              [class.is-selected]="d.id === selectedId()"
+              [class.is-disabled]="!d.isBookable"
+              [attr.aria-selected]="d.id === selectedId()"
+              [attr.aria-disabled]="!d.isBookable"
+              [attr.tabindex]="d.isBookable ? 0 : -1"
+              (click)="select(d)"
+              (keydown.enter)="select(d)"
+              (keydown.space)="$event.preventDefault(); select(d)"
+            >
+              <span class="board__date">
+                {{ d.startDate | date: 'EEE d MMM' }}
+                @if (p.durationDays > 1) {
+                  <small>until {{ d.endDate | date: 'd MMM' }}</small>
+                }
+              </span>
+              <span class="board__seats" [class.is-low]="d.isBookable && d.seatsAvailable <= 4">{{ seatsLabel(d) }}</span>
+              <span class="board__price">{{ d.pricePerPerson | qar }}</span>
+            </li>
+          }
+        </ul>
+
+        @if (selected(); as d) {
+          <div class="board__book">
+            <div class="stepper" role="group" aria-label="Number of travellers">
+              <span>Travellers</span>
+              <button type="button" (click)="changeSeats(-1)" [disabled]="seats() <= 1" aria-label="Fewer travellers">−</button>
+              <output>{{ seats() }}</output>
+              <button type="button" (click)="changeSeats(1)" [disabled]="seats() >= maxSeats()" aria-label="More travellers">+</button>
+            </div>
+            <p class="board__total">
+              <span>{{ seats() }} × {{ d.pricePerPerson | qar }}</span>
+              <strong>{{ estimate() | qar }}</strong>
+            </p>
+            <button type="button" class="btn btn--primary btn--block" (click)="continue()">Book {{ d.startDate | date: 'd MMMM' }}</button>
+            <p class="board__note">Seats are held for 15 minutes while you pay. Promo codes can be added on the next step.</p>
+          </div>
+        }
+      }
+    </aside>
+  </div>
+} @else if (error()) {
+  <div class="container page">
+    <div class="notice notice--error">{{ error() }}</div>
+    <a routerLink="/" class="btn">Back to all trips</a>
+  </div>
+} @else {
+  <div class="container page"><p class="muted">Loading trip…</p></div>
+}
