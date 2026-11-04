@@ -1,0 +1,6 @@
+# Copy to backend.hcl. The storage account holds Terraform state with locking.
+resource_group_name  = "rg-terraform-state"
+storage_account_name = "sttfstatesafar"
+container_name       = "tfstate"
+key                  = "safar-dev.tfstate"
+use_azuread_auth     = true

@@ -21,3 +21,16 @@ Thumbs.db
 # Secrets
 .env
 appsettings.*.local.json
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+.terraform.lock.hcl
+
+# Ansible
+deploy/ansible/inventory/hosts.yml
+*.retry

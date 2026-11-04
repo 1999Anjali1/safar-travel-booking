@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and fill in
+subscription_id = "00000000-0000-0000-0000-000000000000"
+project         = "safar"
+environment     = "dev"
+location        = "qatarcentral"
+node_vm_size    = "Standard_B2s"
