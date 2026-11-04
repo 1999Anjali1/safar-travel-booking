@@ -43,6 +43,7 @@ public class SafarApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // Environment variables are read by WebApplication.CreateBuilder before services are registered
         Environment.SetEnvironmentVariable("ConnectionStrings__Postgres", _connectionString);
         Environment.SetEnvironmentVariable("RateLimiting__AuthPerMinute", "10000");
+        Environment.SetEnvironmentVariable("RateLimiting__AssistantPerMinute", "10000");
 
         _ = Server; // boots the app: runs migrations + seed
     }

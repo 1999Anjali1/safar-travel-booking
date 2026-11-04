@@ -63,3 +63,15 @@ public interface INotificationService
 {
     Task BookingEventAsync(BookingNotification notification, CancellationToken ct = default);
 }
+
+/// <summary>
+/// A chat-completion model that answers in JSON (Groq, OpenAI or Azure OpenAI - any OpenAI-compatible API).
+/// </summary>
+public interface ILanguageModel
+{
+    /// <summary>False when no API key is configured; callers then use their non-AI fallback.</summary>
+    bool IsConfigured { get; }
+
+    /// <summary>Returns the model's JSON reply, or null if it gave none.</summary>
+    Task<string?> CompleteJsonAsync(string systemPrompt, string userMessage, CancellationToken ct = default);
+}

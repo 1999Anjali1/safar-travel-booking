@@ -1,0 +1,75 @@
+<section class="planner-hero">
+  <div class="container">
+    <h1>Plan a trip with AI</h1>
+    <p>Describe what you want in your own words: when, how long, who's going, your budget. You'll get trips that fit, with real dates and seats.</p>
+  </div>
+</section>
+
+<div class="container page planner">
+  <ol class="conversation" aria-live="polite">
+    @for (turn of turns(); track $index) {
+      <li class="turn">
+        <p class="turn__question">{{ turn.question }}</p>
+
+        @if (turn.plan; as plan) {
+          <div class="turn__answer">
+            <p class="turn__reply">{{ plan.reply }}</p>
+            <div class="suggestions">
+              @for (s of plan.suggestions; track s.slug) {
+                <a class="suggestion" [routerLink]="['/trips', s.slug]">
+                  <app-cover [destination]="s.destination" [country]="s.country" [category]="s.category" size="thumb" />
+                  <div class="suggestion__body">
+                    <h2>{{ s.title }}</h2>
+                    <p>{{ s.reason }}</p>
+                    <p class="suggestion__facts">
+                      @if (s.suggestedDeparture) { <span>{{ s.suggestedDeparture | date: 'EEE d MMM' }}</span> }
+                      <span>{{ s.durationDays }} {{ s.durationDays === 1 ? 'day' : 'days' }}</span>
+                      <strong>{{ s.pricePerPerson | qar }} pp</strong>
+                    </p>
+                    @if (s.seatsLeft !== null && s.seatsLeft <= 4) {
+                      <p class="suggestion__warn">Only {{ s.seatsLeft }} seats left on this date</p>
+                    }
+                  </div>
+                </a>
+              }
+            </div>
+            <p class="turn__source">
+              {{ plan.source === 'ai' ? 'Suggested by AI from our live trip list.' : 'Matched by our trip finder (AI is not configured on this server).' }}
+              Prices and seats are confirmed when you book.
+            </p>
+          </div>
+        } @else if (turn.error) {
+          <div class="notice notice--error">{{ turn.error }}</div>
+        } @else {
+          <p class="turn__thinking">Finding trips that fit…</p>
+        }
+      </li>
+    }
+  </ol>
+
+  @if (turns().length === 0) {
+    <div class="examples">
+      <p class="muted">Try one of these:</p>
+      @for (e of examples; track e) {
+        <button type="button" class="chip chip--dark" (click)="ask(e)">{{ e }}</button>
+      }
+    </div>
+  }
+
+  <form class="ask" (ngSubmit)="ask()">
+    <label class="visually-hidden" for="ask-box">Describe your trip</label>
+    <textarea
+      id="ask-box"
+      #box
+      name="message"
+      rows="2"
+      maxlength="500"
+      [(ngModel)]="message"
+      (keydown)="onKey($event)"
+      placeholder="e.g. 5 days in the mountains in January for 2 adults, around QAR 3,000 each"
+    ></textarea>
+    <button type="submit" class="btn btn--primary" [disabled]="thinking() || message.trim().length < 3">
+      {{ thinking() ? 'Thinking…' : 'Find trips' }}
+    </button>
+  </form>
+</div>

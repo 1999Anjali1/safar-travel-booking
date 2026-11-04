@@ -15,6 +15,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/catalog/explore').then((m) => m.Explore),
       },
       {
+        path: 'plan',
+        title: 'Safar - Plan a trip with AI',
+        loadComponent: () => import('./features/assistant/plan-trip').then((m) => m.PlanTrip),
+      },
+      {
         path: 'trips/:slug',
         title: 'Safar - Trip details',
         loadComponent: () => import('./features/catalog/package-page').then((m) => m.PackagePage),

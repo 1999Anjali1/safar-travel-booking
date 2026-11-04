@@ -311,3 +311,24 @@ export interface BookingEvent {
   seats: number;
   total: number;
 }
+
+// ---------- AI trip planner ----------
+
+export interface TripSuggestion {
+  slug: string;
+  title: string;
+  destination: string;
+  country: string;
+  category: PackageCategory;
+  durationDays: number;
+  pricePerPerson: number;
+  suggestedDeparture: string | null;
+  seatsLeft: number | null;
+  reason: string;
+}
+
+export interface TripPlan {
+  reply: string;
+  suggestions: TripSuggestion[];
+  source: 'ai' | 'rules';
+}

@@ -19,6 +19,7 @@ import {
   PaymentMethod,
   PromoCode,
   Quote,
+  TripPlan,
   UpsertPackageRequest,
 } from './models';
 
@@ -80,6 +81,15 @@ export class BookingApi {
 
   cancel(reference: string, reason: string | null) {
     return this.http.post<Booking>(`${this.base}/${reference}/cancel`, { reason });
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class AssistantApi {
+  private readonly http = inject(HttpClient);
+
+  plan(message: string) {
+    return this.http.post<TripPlan>(`${environment.apiUrl}/assistant/plan`, { message });
   }
 }
 

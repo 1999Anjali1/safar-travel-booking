@@ -9,6 +9,8 @@
       <button type="submit" class="btn btn--accent">Search</button>
     </form>
 
+    <p class="hero__ai">Not sure where to go? <a routerLink="/plan">Describe your trip and let AI suggest one</a></p>
+
     <div class="chips" role="group" aria-label="Trip type">
       <button type="button" class="chip" [class.is-active]="!category()" (click)="update({ category: null })">All trips</button>
       @for (c of categories; track c) {

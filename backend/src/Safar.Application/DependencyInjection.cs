@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Safar.Application.Admin;
+using Safar.Application.Assistant;
 using Safar.Application.Auth;
 using Safar.Application.Bookings;
 using Safar.Application.Packages;
@@ -19,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminDashboardService, AdminDashboardService>();
         services.AddScoped<IAdminCatalogService, AdminCatalogService>();
         services.AddScoped<IAdminBookingService, AdminBookingService>();
+        services.AddScoped<ITripAssistant, TripAssistant>();
 
         return services;
     }

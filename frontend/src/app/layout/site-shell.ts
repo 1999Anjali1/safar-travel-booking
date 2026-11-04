@@ -11,6 +11,7 @@ import { AuthService } from '../core/auth.service';
         <a routerLink="/" class="wordmark" aria-label="Safar home">safar</a>
         <nav class="site-nav">
           <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }">Explore trips</a>
+          <a routerLink="/plan" routerLinkActive="is-active">Plan with AI</a>
           @if (auth.isSignedIn()) {
             <a routerLink="/my-trips" routerLinkActive="is-active">My trips</a>
             @if (auth.isStaff()) {
