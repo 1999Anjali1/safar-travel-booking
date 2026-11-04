@@ -1,0 +1,24 @@
+# Base manifests shared by every environment. Build with:  kubectl kustomize deploy/k8s/overlays/<env>
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: safar
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: safar
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - migrate-job.yaml
+  - api.yaml
+  - web.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+images:
+  - name: safar-api
+    newName: safar-api
+    newTag: latest
+  - name: safar-web
+    newName: safar-web
+    newTag: latest

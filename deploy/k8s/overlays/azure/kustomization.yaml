@@ -1,0 +1,22 @@
+# Azure Kubernetes Service. Infrastructure comes from deploy/terraform; images from Azure Container Registry.
+# The secret "safar-secrets" is created by the deploy pipeline from GitHub/Key Vault secrets - never committed.
+# The pipeline sets the image tags with:  kustomize edit set image safar-api=<acr>.azurecr.io/safar-api:<sha>
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: safar
+resources:
+  - ../../base
+  - ingress.yaml
+images:
+  - name: safar-api
+    newName: safaracr.azurecr.io/safar-api
+    newTag: latest
+  - name: safar-web
+    newName: safaracr.azurecr.io/safar-web
+    newTag: latest
+patches:
+  - target: { kind: ConfigMap, name: safar-api-config }
+    patch: |-
+      - op: replace
+        path: /data/Database__SeedDemoData
+        value: "false"

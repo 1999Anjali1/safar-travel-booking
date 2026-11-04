@@ -1,0 +1,10 @@
+# Keep at least one API pod running during node upgrades / drains
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: safar-api

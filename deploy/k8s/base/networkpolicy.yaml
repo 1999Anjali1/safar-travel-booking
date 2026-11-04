@@ -1,0 +1,20 @@
+# Only the web (nginx) pods - and the ingress controller - may call the API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: safar-api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: safar-web
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8080

@@ -1,0 +1,37 @@
+# Runs EF Core migrations once per release, before the API pods become ready.
+# Re-run on deploy:  kubectl -n safar delete job safar-migrate --ignore-not-found && kubectl apply -k ...
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: safar-migrate
+  labels:
+    app.kubernetes.io/name: safar-migrate
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: safar-migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: safar-api
+          args: ["--migrate"]
+          envFrom:
+            - configMapRef:
+                name: safar-api-config
+            - secretRef:
+                name: safar-secrets
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 384Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

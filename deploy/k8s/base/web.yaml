@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: safar-web
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: safar-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: safar-web
+    spec:
+      containers:
+        - name: web
+          image: safar-web
+          ports:
+            - name: http
+              containerPort: 80
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: safar-web
+spec:
+  selector:
+    app.kubernetes.io/name: safar-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

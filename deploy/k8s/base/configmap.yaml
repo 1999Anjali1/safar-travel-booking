@@ -1,0 +1,12 @@
+# Non-secret settings, injected as environment variables (ASP.NET Core reads Section__Key)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: safar-api-config
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  Database__MigrateOnStartup: "false"   # the migrate Job does it once
+  Database__SeedDemoData: "true"
+  Ai__Model: openai/gpt-oss-20b
+  RateLimiting__AuthPerMinute: "10"
+  RateLimiting__AssistantPerMinute: "6"

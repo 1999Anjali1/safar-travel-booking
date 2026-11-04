@@ -1,0 +1,59 @@
+# Local cluster (kind, minikube, Docker Desktop): in-cluster PostgreSQL, single replicas, locally built images.
+#   kind load docker-image safar-api:local safar-web:local
+#   kubectl apply -k deploy/k8s/overlays/local
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: safar
+resources:
+  - ../../base
+  - postgres.yaml
+secretGenerator:
+  - name: safar-secrets
+    literals:
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=safar;Username=safar;Password=local-dev-only
+      - Jwt__Key=local-kubernetes-signing-key-change-me-0123456789
+      - Ai__ApiKey=
+  - name: postgres-credentials
+    literals:
+      - POSTGRES_DB=safar
+      - POSTGRES_USER=safar
+      - POSTGRES_PASSWORD=local-dev-only
+generatorOptions:
+  disableNameSuffixHash: true
+images:
+  - name: safar-api
+    newName: safar-api
+    newTag: local
+  - name: safar-web
+    newName: safar-web
+    newTag: local
+patches:
+  - target: { kind: Deployment, name: api }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target: { kind: Deployment, name: web }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target: { kind: Job, name: safar-migrate }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target: { kind: HorizontalPodAutoscaler, name: api }
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
