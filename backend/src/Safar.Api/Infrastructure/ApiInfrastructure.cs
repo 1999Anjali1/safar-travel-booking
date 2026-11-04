@@ -48,6 +48,7 @@ public class GlobalExceptionHandler(IProblemDetailsService problemDetails, ILogg
             ForbiddenException => (StatusCodes.Status403Forbidden, exception.Message),
             NotFoundException => (StatusCodes.Status404NotFound, exception.Message),
             ConflictException => (StatusCodes.Status409Conflict, exception.Message),
+            DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "Seats on this departure changed while you were booking. Please try again."),
             DomainException => (StatusCodes.Status422UnprocessableEntity, exception.Message),
             _ => (StatusCodes.Status500InternalServerError, "Something went wrong. Please try again.")
         };
@@ -74,11 +75,45 @@ public class GlobalExceptionHandler(IProblemDetailsService problemDetails, ILogg
     }
 }
 
-/// <summary>/health reports Unhealthy if PostgreSQL can't be reached.</summary>
+/// <summary>/health is Unhealthy until PostgreSQL is reachable and every migration is applied (Kubernetes readiness).</summary>
 public class DatabaseHealthCheck(Safar.Infrastructure.Persistence.AppDbContext db) : IHealthCheck
 {
-    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default) =>
-        await db.Database.CanConnectAsync(ct)
-            ? HealthCheckResult.Healthy()
-            : HealthCheckResult.Unhealthy("Cannot connect to PostgreSQL");
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
+    {
+        if (!await db.Database.CanConnectAsync(ct)) return HealthCheckResult.Unhealthy("Cannot connect to PostgreSQL");
+        var pending = (await db.Database.GetPendingMigrationsAsync(ct)).Count();
+        return pending == 0 ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy($"{pending} migration(s) pending");
+    }
+}
+
+public static class DatabaseSetup
+{
+    /// <summary>Applies EF Core migrations (waiting up to ~1 minute for the database) and seeds demo data.</summary>
+    public static async Task MigrateAndSeedAsync(IServiceProvider services, IConfiguration config, ILogger logger)
+    {
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Safar.Infrastructure.Persistence.AppDbContext>();
+
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await db.Database.MigrateAsync();
+                break;
+            }
+            catch (Exception ex) when (attempt < 30 && ex is Npgsql.NpgsqlException or System.Net.Sockets.SocketException or InvalidOperationException)
+            {
+                logger.LogWarning("Database not ready (attempt {Attempt}/30): {Message}", attempt, ex.Message);
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+        }
+
+        if (config.GetValue("Database:SeedDemoData", true))
+        {
+            await Safar.Infrastructure.Persistence.DbSeeder.SeedAsync(db,
+                scope.ServiceProvider.GetRequiredService<IPasswordService>(),
+                scope.ServiceProvider.GetRequiredService<TimeProvider>());
+        }
+        logger.LogInformation("Database migrated{Seed}", config.GetValue("Database:SeedDemoData", true) ? " and seeded" : "");
+    }
 }

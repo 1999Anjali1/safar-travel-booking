@@ -29,7 +29,7 @@ public class BookingService(
     IValidator<CreateBookingRequest> createValidator,
     IValidator<PayRequest> payValidator) : IBookingService
 {
-    private const int MaxConcurrencyRetries = 3;
+    private const int MaxConcurrencyRetries = 6;
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
     private Guid UserId => currentUser.UserId ?? throw new UnauthorizedException("Please sign in to book.");
@@ -99,6 +99,7 @@ public class BookingService(
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyRetries)
             {
                 db.ResetTracking(); // someone else booked at the same time - reload fresh seat counts
+                await Task.Delay(Random.Shared.Next(10, 40) * attempt, ct); // jitter so retries don't collide again
             }
         }
     }

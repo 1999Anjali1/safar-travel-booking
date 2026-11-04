@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Safar.Api.Hubs;
@@ -77,6 +77,13 @@ builder.Services.AddRateLimiter(options =>
             PermitLimit = config.GetValue("RateLimiting:AuthPerMinute", 10),
             Window = TimeSpan.FromMinutes(1)
         }));
+    options.AddPolicy("assistant", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = config.GetValue("RateLimiting:AssistantPerMinute", 6),
+            Window = TimeSpan.FromMinutes(1)
+        }));
 });
 
 // ---------- CORS for the Angular dev server ----------
@@ -114,19 +121,14 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // ---------- Database: apply migrations and seed demo data ----------
-if (config.GetValue("Database:MigrateOnStartup", true))
+// `dotnet Safar.Api.dll --migrate` only migrates and exits (used by the Kubernetes migration Job,
+// so several API replicas never race to migrate the same database).
+var migrateOnly = args.Contains("--migrate");
+if (migrateOnly || config.GetValue("Database:MigrateOnStartup", true))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-
-    if (config.GetValue("Database:SeedDemoData", true))
-    {
-        await DbSeeder.SeedAsync(db,
-            scope.ServiceProvider.GetRequiredService<IPasswordService>(),
-            scope.ServiceProvider.GetRequiredService<TimeProvider>());
-    }
+    await DatabaseSetup.MigrateAndSeedAsync(app.Services, config, app.Logger);
 }
+if (migrateOnly) return;
 
 // ---------- HTTP pipeline ----------
 app.UseExceptionHandler();
@@ -145,7 +147,8 @@ app.UseOutputCache();
 
 app.MapControllers();
 app.MapHub<NotificationsHub>("/hubs/notifications");
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health");                                                          // readiness: DB reachable + migrated
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });    // liveness: process is up
 
 app.Run();
 
