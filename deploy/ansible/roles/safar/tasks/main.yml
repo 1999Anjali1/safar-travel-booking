@@ -34,7 +34,7 @@
 - name: Start (or update) the containers
   community.docker.docker_compose_v2:
     project_src: "{{ safar_dir }}"
-    pull: "{{ 'always' if safar_pull_images else 'missing' }}"
+    pull: "{{ 'always' if safar_pull_images | bool else 'missing' }}"
     state: present
     remove_orphans: true
   register: safar_compose
