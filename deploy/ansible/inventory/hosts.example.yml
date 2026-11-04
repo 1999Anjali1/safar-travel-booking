@@ -1,0 +1,8 @@
+# Copy to inventory/hosts.yml. Any Ubuntu 22.04 / 24.04 server (Azure VM, AWS EC2, Hetzner, on-prem).
+all:
+  children:
+    web:
+      hosts:
+        safar-prod-1:
+          ansible_host: 203.0.113.10
+          ansible_user: azureuser

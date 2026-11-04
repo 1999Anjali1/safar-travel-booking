@@ -1,0 +1,23 @@
+# Provision an Ubuntu server and deploy Safar with Docker Compose.
+#   ansible-playbook site.yml                          # everything
+#   ansible-playbook site.yml --tags deploy            # only roll out new images
+#   ansible-playbook site.yml --check --diff           # dry run
+- name: Provision and deploy Safar
+  hosts: web
+  become: true
+
+  pre_tasks:
+    - name: Only Ubuntu is supported
+      ansible.builtin.assert:
+        that: ansible_distribution == "Ubuntu"
+        fail_msg: "This playbook targets Ubuntu 22.04/24.04 (found {{ ansible_distribution }})."
+
+  roles:
+    - role: common
+      tags: [common]
+    - role: security
+      tags: [security]
+    - role: docker
+      tags: [docker]
+    - role: safar
+      tags: [deploy]

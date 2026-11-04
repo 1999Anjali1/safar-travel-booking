@@ -1,0 +1,54 @@
+- name: Create the application directory
+  ansible.builtin.file:
+    path: "{{ safar_dir }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0750"
+
+- name: Write the Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ safar_dir }}/docker-compose.yml"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0640"
+
+- name: Write the secrets file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ safar_dir }}/.env"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Log in to the container registry
+  ansible.builtin.command:
+    cmd: docker login {{ safar_registry }} --username {{ safar_registry_username }} --password-stdin
+    stdin: "{{ safar_registry_password }}"
+  when: safar_registry_password | length > 0
+  changed_when: false
+  no_log: true
+
+- name: Start (or update) the containers
+  community.docker.docker_compose_v2:
+    project_src: "{{ safar_dir }}"
+    pull: "{{ 'always' if safar_pull_images else 'missing' }}"
+    state: present
+    remove_orphans: true
+  register: safar_compose
+
+- name: Wait until the site answers through nginx
+  ansible.builtin.uri:
+    url: "http://localhost:{{ safar_http_port }}/api/packages?pageSize=1"
+    status_code: 200
+  register: safar_smoke
+  until: safar_smoke.status == 200
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Show the result
+  ansible.builtin.debug:
+    msg: "Safar is up on port {{ safar_http_port }} ({{ safar_smoke.json.totalCount }} trips published)."

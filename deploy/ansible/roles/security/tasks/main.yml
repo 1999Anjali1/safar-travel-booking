@@ -1,0 +1,53 @@
+- name: Harden the SSH server
+  ansible.builtin.template:
+    src: sshd-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ssh
+  tags: [ssh]
+
+- name: Validate the SSH configuration
+  ansible.builtin.command: sshd -t
+  changed_when: false
+  tags: [ssh]
+
+- name: Firewall - deny incoming by default
+  community.general.ufw:
+    default: deny
+    direction: incoming
+  tags: [firewall]
+
+- name: Firewall - allow SSH, HTTP and HTTPS
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "{{ ssh_port }}"
+    - "80"
+    - "443"
+  tags: [firewall]
+
+- name: Firewall - enable
+  community.general.ufw:
+    state: enabled
+  tags: [firewall]
+
+- name: Configure fail2ban for SSH
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+  tags: [fail2ban]
+
+- name: Make sure fail2ban is running
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true
+  tags: [fail2ban]

@@ -1,0 +1,24 @@
+# ---------- server ----------
+server_timezone: Asia/Qatar
+deploy_user: safar
+# Public SSH key allowed to log in as the deploy user (optional)
+deploy_ssh_public_key: ""
+ssh_port: 22
+
+# ---------- application ----------
+safar_dir: /opt/safar
+safar_http_port: 80
+safar_api_image: ghcr.io/1999anjali1/safar-api:latest
+safar_web_image: ghcr.io/1999anjali1/safar-web:latest
+safar_pull_images: true
+
+# Private registry login (optional) - e.g. GHCR with a token that can read packages
+safar_registry: ghcr.io
+safar_registry_username: ""
+safar_registry_password: ""
+
+# Secrets: keep real values in an Ansible Vault file, e.g.
+#   ansible-vault create group_vars/web/vault.yml
+safar_postgres_password: "{{ vault_safar_postgres_password | default('change-me-postgres') }}"
+safar_jwt_key: "{{ vault_safar_jwt_key | default('change-me-jwt-signing-key-at-least-32-chars') }}"
+safar_ai_api_key: "{{ vault_safar_ai_api_key | default('') }}"

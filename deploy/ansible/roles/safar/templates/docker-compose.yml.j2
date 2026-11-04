@@ -1,0 +1,39 @@
+# {{ ansible_managed }}
+name: safar
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: safar
+      POSTGRES_USER: safar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safar -d safar"]
+      interval: 5s
+      retries: 20
+
+  api:
+    image: {{ safar_api_image }}
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Postgres: Host=db;Port=5432;Database=safar;Username=safar;Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY}
+      Ai__ApiKey: ${AI_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: {{ safar_web_image }}
+    restart: unless-stopped
+    ports:
+      - "{{ safar_http_port }}:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

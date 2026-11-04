@@ -1,0 +1,7 @@
+# Used by GitHub Actions to run the playbook against the runner itself
+all:
+  children:
+    web:
+      hosts:
+        localhost:
+          ansible_connection: local
