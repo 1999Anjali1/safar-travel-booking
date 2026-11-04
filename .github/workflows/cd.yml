@@ -1,0 +1,246 @@
+name: CD
+
+# Proves the deployment code works on every push:
+#   1. validates Terraform, Kubernetes manifests and Ansible
+#   2. deploys the real images to a Kubernetes (kind) cluster and smoke-tests them
+#   3. provisions an Ubuntu machine with Ansible and smoke-tests the Docker Compose deployment
+#   4. publishes images to GitHub Container Registry
+#   5. (manual) deploys to Azure Kubernetes Service
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_to_aks:
+        description: Deploy to Azure Kubernetes Service (needs Azure secrets)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform - fmt & validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  manifests:
+    name: Kubernetes manifests - kustomize & kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate every overlay against the Kubernetes 1.31 schema
+        run: |
+          for overlay in deploy/k8s/overlays/*/; do
+            echo "::group::$overlay"
+            kubectl kustomize "$overlay" | kubeconform -strict -summary -kubernetes-version 1.31.0
+            echo "::endgroup::"
+          done
+
+  ansible-lint:
+    name: Ansible - lint & syntax check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/ansible
+    steps:
+      - uses: actions/checkout@v5
+      - run: pipx install --include-deps "ansible>=10,<12" && pipx inject --include-apps ansible ansible-lint
+      - run: ansible-playbook -i inventory/ci.yml site.yml --syntax-check
+      - run: ansible-lint
+
+  kubernetes-e2e:
+    name: Deploy to Kubernetes (kind) & smoke test
+    runs-on: ubuntu-latest
+    needs: [manifests]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build images
+        run: |
+          docker build -t safar-api:local backend
+          docker build -t safar-web:local frontend
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: safar
+
+      - name: Load images into the cluster
+        run: kind load docker-image safar-api:local safar-web:local --name safar
+
+      - name: Deploy
+        run: kubectl apply -k deploy/k8s/overlays/local
+
+      - name: Wait for database, migrations and rollout
+        run: |
+          kubectl -n safar rollout status statefulset/postgres --timeout=180s
+          kubectl -n safar wait --for=condition=complete job/safar-migrate --timeout=300s
+          kubectl -n safar rollout status deployment/api --timeout=180s
+          kubectl -n safar rollout status deployment/web --timeout=120s
+          kubectl -n safar get pods -o wide
+
+      - name: Smoke test through the web service (nginx -> api -> postgres)
+        run: |
+          kubectl -n safar port-forward svc/web 8080:80 >/tmp/pf.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/ >/dev/null && break; sleep 2; done
+          curl -sf http://localhost:8080/ | grep -q "<app-root>"
+          count=$(curl -sf "http://localhost:8080/api/packages?pageSize=1" | jq .totalCount)
+          echo "Published trips: $count"; test "$count" -ge 8
+          curl -sf -X POST http://localhost:8080/api/assistant/plan -H 'Content-Type: application/json' \
+            -d '{"message":"beach holiday in the Maldives"}' | jq -e '.suggestions[0].slug == "maldives-island-escape"'
+
+      - name: Rolling update keeps serving traffic
+        run: |
+          kubectl -n safar rollout restart deployment/api
+          kubectl -n safar rollout status deployment/api --timeout=180s
+          curl -sf "http://localhost:8080/api/packages?pageSize=1" | jq -e '.totalCount >= 8'
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl -n safar get all,events
+          kubectl -n safar describe pods
+          kubectl -n safar logs job/safar-migrate --tail=100 || true
+          kubectl -n safar logs deployment/api --tail=100 || true
+
+  ansible-e2e:
+    name: Provision Ubuntu with Ansible & smoke test
+    runs-on: ubuntu-24.04
+    needs: [ansible-lint]
+    defaults:
+      run:
+        working-directory: deploy/ansible
+    steps:
+      - uses: actions/checkout@v5
+      - run: pipx install --include-deps "ansible>=10,<12"
+
+      - name: Build images (stand-in for the registry)
+        working-directory: .
+        run: |
+          docker build -t safar-api:ci backend
+          docker build -t safar-web:ci frontend
+
+      # The runner itself is the target. Firewall and SSH hardening are skipped so the runner stays reachable.
+      - name: Run the playbook
+        run: >-
+          ansible-playbook -i inventory/ci.yml site.yml
+          --skip-tags firewall,ssh,docker_daemon
+          -e safar_api_image=safar-api:ci -e safar_web_image=safar-web:ci
+          -e safar_pull_images=false -e safar_http_port=8088
+
+      - name: Run it again - must change nothing (idempotency)
+        run: |
+          ansible-playbook -i inventory/ci.yml site.yml \
+            --skip-tags firewall,ssh,docker_daemon \
+            -e safar_api_image=safar-api:ci -e safar_web_image=safar-web:ci \
+            -e safar_pull_images=false -e safar_http_port=8088 | tee second-run.log
+          grep -E "localhost\s*:.*changed=0 " second-run.log
+
+      - name: Smoke test
+        run: |
+          curl -sf "http://localhost:8088/api/packages?pageSize=1" | jq -e '.totalCount >= 8'
+          sudo docker compose -f /opt/safar/docker-compose.yml ps
+          systemctl is-active fail2ban
+
+  publish:
+    name: Publish images to GHCR
+    runs-on: ubuntu-latest
+    needs: [terraform, kubernetes-e2e, ansible-e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: ghcr.io/${{ env.OWNER }}/safar-api:${{ github.sha }},ghcr.io/${{ env.OWNER }}/safar-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: ghcr.io/${{ env.OWNER }}/safar-web:${{ github.sha }},ghcr.io/${{ env.OWNER }}/safar-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  deploy-aks:
+    name: Deploy to Azure Kubernetes Service
+    runs-on: ubuntu-latest
+    needs: [publish]
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_to_aks
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # Azure login with OpenID Connect - no long-lived credentials
+    env:
+      ACR: ${{ vars.ACR_NAME }}
+      RG: ${{ vars.AKS_RESOURCE_GROUP }}
+      AKS: ${{ vars.AKS_NAME }}
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push images to Azure Container Registry
+        run: |
+          az acr build -r "$ACR" -t "safar-api:$TAG" backend
+          az acr build -r "$ACR" -t "safar-web:$TAG" frontend
+
+      - name: Connect to the cluster
+        run: az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
+
+      - name: Create or update secrets
+        env:
+          PG: ${{ secrets.POSTGRES_CONNECTION_STRING }}
+          JWT: ${{ secrets.JWT_KEY }}
+          AI: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          kubectl create namespace safar --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n safar create secret generic safar-secrets \
+            --from-literal=ConnectionStrings__Postgres="$PG" \
+            --from-literal=Jwt__Key="$JWT" \
+            --from-literal=Ai__ApiKey="$AI" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy this commit
+        working-directory: deploy/k8s/overlays/azure
+        run: |
+          kustomize edit set image "safar-api=$ACR.azurecr.io/safar-api:$TAG" "safar-web=$ACR.azurecr.io/safar-web:$TAG"
+          kubectl -n safar delete job safar-migrate --ignore-not-found
+          kubectl apply -k .
+          kubectl -n safar wait --for=condition=complete job/safar-migrate --timeout=300s
+          kubectl -n safar rollout status deployment/api --timeout=300s
+          kubectl -n safar rollout status deployment/web --timeout=180s

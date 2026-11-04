@@ -22,6 +22,8 @@ services:
       ConnectionStrings__Postgres: "Host=db;Port=5432;Database=safar;Username=safar;Password=safar_dev_password"
       Jwt__Key: "docker-compose-demo-signing-key-change-me-0123456789"
       Cors__Origins__0: "http://localhost:8080"
+      # Optional: set GROQ_API_KEY in your shell or a .env file to turn on the AI trip planner
+      Ai__ApiKey: "${GROQ_API_KEY:-}"
     depends_on:
       db:
         condition: service_healthy
